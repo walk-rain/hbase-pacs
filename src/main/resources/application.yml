@@ -1,0 +1,15 @@
+server:
+ port: 9192
+
+# Socket配置
+socket:
+ # 监听端口 2323
+ port: 2323
+ # 线程池 - 保持线程数 20
+ pool-keep: 20
+ # 线程池 - 核心线程数 10
+ pool-core: 10
+ # 线程池 - 最大线程数 20
+ pool-max: 30
+ # 线程队列容量 10
+ pool-queue-init: 10
