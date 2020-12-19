@@ -41,7 +41,7 @@ public class AcceptThread extends Thread {
             if (bytes.length>=307200) {
                 String hdfsFileName = "/pacs/" + fileName;
                 hdfsService.putHdfs(hdfsFileName,bytes);
-                hBaseService.putData("test:pacs_f2",fileName,"f1",new String[]{"a1","a2"},new String[]{"1",hdfsFileName});
+                //hBaseService.putData("test:pacs_f2",fileName,"f1",new String[]{"a1","a2"},new String[]{"1",hdfsFileName});
             } else {
                 hBaseService.putPacs("test:pacs_f2",fileName,"f1",new String[]{"a1"},new String[]{"1"},"f2",bytes);
             }

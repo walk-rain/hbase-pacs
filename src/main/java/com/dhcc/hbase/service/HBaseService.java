@@ -1,28 +1,28 @@
 package com.dhcc.hbase.service;
 
+import com.dhcc.hbase.config.HadoopConfig;
+import com.dhcc.hbase.config.SocketProperties;
 import com.dhcc.hbase.dto.PacsDTO;
+import com.dhcc.hbase.util.FileUtil;
+import com.dhcc.hbase.util.TimeUtil;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class HBaseService {
     private Logger log = LoggerFactory.getLogger(HBaseService.class);
+
+    @Autowired
+    private HadoopConfig hadoopConfig;
+
     /**
      * 管理员可以做表以及数据的增删改查功能
      */
@@ -32,9 +32,9 @@ public class HBaseService {
     @Autowired
     private HdfsService hdfsService;
 
-    public HBaseService(Configuration conf) {
+    public HBaseService(Configuration config) {
         try {
-            connection = ConnectionFactory.createConnection(conf);
+            connection = ConnectionFactory.createConnection(config);
             admin = connection.getAdmin();
         } catch (IOException e) {
             log.error("获取HBase连接失败!");
@@ -72,31 +72,6 @@ public class HBaseService {
         return true;
     }
 
-    /**
-     * 查询所有表的表名
-     */
-    public List<String> getAllTableNames() {
-        List<String> result = new ArrayList<>();
-        try {
-            TableName[] tableNames = admin.listTableNames();
-            for (TableName tableName : tableNames) {
-                result.add(tableName.getNameAsString());
-            }
-        } catch (IOException e) {
-            log.error("获取所有表的表名失败", e);
-        } finally {
-            close(admin, null, null);
-        }
-        return result;
-    }
-
-    /**
-     * 遍历查询指定表中的所有数据
-     */
-    public Map<String, Map<String, String>> getResultScanner(String tableName) {
-        Scan scan = new Scan();
-        return this.queryData(tableName, scan);
-    }
 
     /**
      * 通过表名及过滤条件查询数据
@@ -137,21 +112,6 @@ public class HBaseService {
         return result;
     }
 
-    /**
-     * 为表添加或者更新数据
-     */
-    public void putData(String tableName, String rowKey, String familyName, String[] columns, String[] values) {
-        Table table = null;
-        try {
-            table = getTable(tableName);
-            putData(table, rowKey, tableName, familyName, columns, values);
-        } catch (Exception e) {
-            log.error(MessageFormat.format("为表添加 or 更新数据失败,tableName:{0},rowKey:{1},familyName:{2}", tableName, rowKey, familyName), e);
-        } finally {
-            close(null, null, table);
-        }
-    }
-
     public void putPacs(String tableName, String rowKey, String familyName1, String[] columns, String[] values, String familyName2, byte[] fileContent) {
         Table table = null;
         try {
@@ -179,30 +139,6 @@ public class HBaseService {
             log.error(MessageFormat.format("为表添加 or 更新数据失败,tableName:{0},rowKey:{1},familyName:{2}", tableName, rowKey, familyName1), e);
         } finally {
             close(null, null, table);
-        }
-    }
-
-    private void putData(Table table, String rowKey, String tableName, String familyName, String[] columns, String[] values) {
-        try {
-            //设置rowkey
-            Put put = new Put(Bytes.toBytes(rowKey));
-            if (columns != null && values != null && columns.length == values.length) {
-                for (int i = 0; i < columns.length; i++) {
-                    if (columns[i] != null && values[i] != null) {
-                        put.addColumn(Bytes.toBytes(familyName), Bytes.toBytes(columns[i]), Bytes.toBytes(values[i]));
-                    } else {
-                        throw new NullPointerException(MessageFormat.format(
-                                "列名和列数据都不能为空,column:{0},value:{1}", columns[i], values[i]));
-                    }
-                }
-            }
-            table.put(put);
-            log.debug("putData add or update data Success,rowKey:" + rowKey);
-            table.close();
-        } catch (Exception e) {
-            log.error(MessageFormat.format(
-                    "为表添加 or 更新数据失败,tableName:{0},rowKey:{1},familyName:{2}",
-                    tableName, rowKey, familyName), e);
         }
     }
 
@@ -301,5 +237,125 @@ public class HBaseService {
                 }
             }
         }
+    }
+
+    public String putPacsIndex(String tableName, String rowKey, List<String> columns, List<String> values) {
+        Table table = null;
+        try {
+            table = getTable(tableName);
+            Put put = new Put(Bytes.toBytes(rowKey));
+            if (columns != null && values != null && columns.size() == values.size()) {
+                for (int i = 0; i < columns.size(); i++) {
+                    if (columns.get(i) != null && values.get(i) != null) {
+                        put.addColumn(Bytes.toBytes(hadoopConfig.getFamily1()),
+                                Bytes.toBytes(columns.get(i)), Bytes.toBytes(values.get(i)));
+                    }
+                }
+            }
+            table.put(put);
+        } catch (Exception e) {
+            log.error(MessageFormat.format("-> -> 保存数据索引到HBase失败：{1}", rowKey), e);
+            return "202^保存记录到HBase失败: " + rowKey;
+        } finally {
+            close(null, null, table);
+        }
+        log.info("-> -> 保存文件索引到HBase成功:" + rowKey);
+        return "000^保存记录到HBase成功: " + rowKey;
+    }
+
+    public String putPacsData(String tableName, String rowKey, List<String> columns, List<String> values, InputStream inputStream) {
+        Table table = null;
+        DataInputStream dataInputStream = null;
+        long totalLength = 0;
+        Date startDate = new Date();
+        try {
+            table = getTable(tableName);
+            Put put = new Put(Bytes.toBytes(rowKey));
+            if (columns != null && values != null && columns.size() == values.size()) {
+                for (int i = 0; i < columns.size(); i++) {
+                    if (columns.get(i) != null && values.get(i) != null) {
+                        put.addColumn(Bytes.toBytes(hadoopConfig.getFamily1()),
+                                Bytes.toBytes(columns.get(i)), Bytes.toBytes(values.get(i)));
+                    }
+                }
+            }
+            dataInputStream = new DataInputStream(inputStream);
+            ByteArrayOutputStream bAOutputStream = new ByteArrayOutputStream();
+            byte[] bytes = new byte[1024];
+            int len = 0;
+            while ((len=dataInputStream.read(bytes)) != -1) {
+                bAOutputStream.write(bytes,0,len);
+                totalLength += len;
+            }
+            byte[] fileContent = bAOutputStream.toByteArray();
+            put.addColumn(Bytes.toBytes(hadoopConfig.getFamily2()),Bytes.toBytes(hadoopConfig.getColumns2()),fileContent);
+            table.put(put);
+        } catch (Exception e) {
+            log.error(MessageFormat.format("-> -> 保存数据到HBase失败：{1}", rowKey), e);
+            return "201^保存记录到HBase失败: " + rowKey;
+        } finally {
+            close(null, null, table);
+            if (dataInputStream!=null) {
+                try {
+                    dataInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        Date endDate = new Date();
+        log.info("-> -> 保存数据到HBase成功:" + rowKey +
+                ", 文件大小：" + FileUtil.getFileScale(totalLength) +
+                ", 耗时：" + TimeUtil.getTimeDiff(startDate,endDate));
+        return "000^保存记录到HBase成功: " + rowKey;
+    }
+
+    public HashMap<String, String> getPacsData(String tableName, String rowKey, OutputStream outputStream) {
+        Table table = null;
+        DataOutputStream dataOutputStream = null;
+        HashMap<String, String> map = new HashMap<>();
+        map.put("RES_CODE","000");
+        Date startDate = new Date();
+        long totalLength = 0;
+        try {
+            table = getTable(tableName);
+            Get get = new Get(Bytes.toBytes(rowKey));
+            Result set = table.get(get);
+            Cell[] cells  = set.rawCells();
+            String family;
+            for(Cell cell : cells) {
+                map.put("RES_CODE","001");
+                family = Bytes.toString(cell.getFamilyArray(),cell.getFamilyOffset(),cell.getFamilyLength());
+                if (hadoopConfig.getFamily1().equalsIgnoreCase(family)) {
+                    map.put(Bytes.toString(cell.getQualifierArray(),cell.getQualifierOffset(),cell.getQualifierLength()),
+                            Bytes.toString(cell.getValueArray(),cell.getValueOffset(),cell.getValueLength()));
+                } else if (hadoopConfig.getFamily2().equalsIgnoreCase(family)) {
+                    int len = cell.getValueLength();
+                    totalLength = len;
+                    byte [] curValue = new byte[len];
+                    System.arraycopy(cell.getValueArray(), cell.getValueOffset(), curValue,0, len);
+                    dataOutputStream = new DataOutputStream(outputStream);
+                    dataOutputStream.write(curValue);
+                    dataOutputStream.flush();
+                    map.put("RES_CODE","002");
+                }
+            }
+        } catch (Exception e) {
+            log.error(MessageFormat.format("-> -> 读取HBase表数据失败：{1}", rowKey), e);
+        } finally {
+            close(null, null, table);
+            if (dataOutputStream!=null) {
+                try {
+                    dataOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        Date endDate = new Date();
+        log.info("-> -> 读取HBase数据成功:" + rowKey +
+                ", 文件长度：" + totalLength + "," + FileUtil.getFileScale(totalLength) +
+                ", 耗时：" +TimeUtil.getTimeDiff(startDate,endDate));
+        return map;
     }
 }

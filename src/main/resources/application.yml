@@ -13,3 +13,20 @@ socket:
  pool-max: 30
  # 线程队列容量 10
  pool-queue-init: 10
+
+hadoop:
+ zk-quorum: "ecs-298f"
+ zk-port: "2182"
+ defaultFS: "hdfs://ecs-298f:9000"
+ name-space: "test"
+ table-name: "pacs_f2"
+ family1: "f1"
+ family2: "f2"
+ columns1: "b1,b2"
+ path-column: "d1"
+ columns2: "c1"
+ pacs-path: "/pacs"
+
+interface:
+ # 0:类型^1:文件名^2:文件长度^3:登记号
+ columns: "2,3"

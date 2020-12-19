@@ -95,12 +95,31 @@ public class FileUtil {
         for (byte b2 : bytes) {
             System.out.print(b2 + " ");
         }*/
+        /*
         byte[] bytes = new byte[0];
         byte[] ibytes = FileUtil.getBytesByFile("D:\\Test\\input\\1.tif");
         bytes = ImageConvert.tiffTurnJpg3(ibytes);
         System.out.println(ibytes.length);
         for (byte b1 : ibytes) {
             System.out.print(b1);
+        }*/
+    }
+
+    public static String getFileScale(long length) {
+        String result;
+        if (length<1024) {
+            result = length + "B";
+        } else {
+            if (length<(1024*1024)) {
+                result = String.format("%.2f", length/1024.0) + "KB";
+            } else {
+                if (length<(1024*1024*1024)) {
+                    result = String.format("%.2f", length/(1024*1024.0)) + "MB";
+                } else {
+                    result = String.format("%.2f", length/(1024*1024*1024.0)) + "GB";
+                }
+            }
         }
+        return result;
     }
 }

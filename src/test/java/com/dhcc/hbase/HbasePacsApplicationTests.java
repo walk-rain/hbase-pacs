@@ -19,11 +19,12 @@ public class HbasePacsApplicationTests {
     @Test
     public void testCreateTable() {
         //hbaseService.creatTable("test_base", Arrays.asList("a", "back"));
-        hbaseService.creatTable("test:pacs_f", Arrays.asList("info"));
+        //hbaseService.creatTable("test:pacs_f", Arrays.asList("info"));
     }
     //测试加入数据
     @Test
     public void testPutData() {
+        /*
         hbaseService.putData("test_base", "000001", "a", new String[]{
                 "project_id", "varName", "coefs", "pvalues", "tvalues",
                 "create_time"}, new String[]{"40866", "mob_3", "0.9416",
@@ -36,15 +37,18 @@ public class HbasePacsApplicationTests {
                 "project_id", "varName", "coefs", "pvalues", "tvalues",
                 "create_time"}, new String[]{"40866", "education", "0.8984",
                 "0.0000", "25.5649", "null"});
+
+         */
     }
     //测试遍历全表
     @Test
     public void testGetResultScanner() {
+        /*
         Map<String, Map<String, String>> result2 = hbaseService.getResultScanner("test_base");
         System.out.println("-----遍历查询全表内容-----");
         result2.forEach((k, value) -> {
             System.out.println(k + "--->" + value);
-        });
+        });*/
     }
     @Test
     public void contextLoads() {
